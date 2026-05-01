@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luka's GAY Dash</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Pacifico&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #1a1a1a;
+            font-family: 'Bungee', cursive;
+            touch-action: manipulation;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(45deg, #ff00ff, #8000ff, #00ffff);
+            background-size: 400% 400%;
+            animation: gradientBG 10s ease infinite;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        canvas {
+            background: rgba(255, 255, 255, 0.1);
+            border: 8px solid #fff;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(255, 0, 255, 0.5);
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 0px #ff00ff;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        #menu {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 2rem;
+            border-radius: 20px;
+            text-align: center;
+            border: 4px solid #ff00ff;
+            z-index: 10;
+        }
+
+        .btn {
+            background: #ff00ff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: scale(1.1) rotate(2deg);
+            background: #00ffff;
+        }
+
+        #luka-msg {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: 'Pacifico', cursive;
+            font-size: 1.8rem;
+            pointer-events: none;
+        }
+        
+        #speed-bar-container {
+            width: 150px;
+            height: 10px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        #speed-bar {
+            height: 100%;
+            width: 0%;
+            background: #00ffff;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui-overlay">
+        <div id="score-display">FABULOUSNESS: 0</div>
+        <div id="lives-display">LIVES: ❤️❤️❤️</div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs">INTENSITY:</span>
+            <div id="speed-bar-container">
+                <div id="speed-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="menu">
+        <h1 class="text-4xl mb-4">LUKA STJEPANOVIC'S<br>GAY DASH</h1>
+        <p class="mb-4">Use ARROW KEYS or TAP to jump/slide!<br>Collect hearts, avoid the haters!<br><br><b>CAUTION: It gets FASTER!</b></p>
+        <button class="btn" onclick="startGame()">SLAY!</button>
+    </div>
+
+    <div id="luka-msg"></div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const menu = document.getElementById('menu');
+    const scoreEl = document.getElementById('score-display');
+    const livesEl = document.getElementById('lives-display');
+    const msgEl = document.getElementById('luka-msg');
+    const speedBar = document.getElementById('speed-bar');
+
+    // Game Constants
+    const GRAVITY = 0.6;
+    const JUMP_FORCE = -15;
+    const INITIAL_SPEED = 7;
+    const MAX_SPEED = 20;
+    const SPEED_INCREMENT = 0.001; // Increase per frame
+    
+    let gameState = 'MENU';
+    let score = 0;
+    let lives = 3;
+    let frame = 0;
+    let currentSpeed = INITIAL_SPEED;
+    let player, obstacles, particles;
+
+    const phrases = [
+        "YASS QUEEN!",
+        "SLAYYY!",
+        "ABSOLUTELY FABULOUS!",
+        "PERIODT!",
+        "LOOKING GOOD, LUKA!",
+        "WORK THAT RUNWAY!",
+        "GORGEOUS!",
+        "ZOOMING!",
+        "SPEEDY ICON!"
+    ];
+
+    function showMsg() {
+        msgEl.innerText = phrases[Math.floor(Math.random() * phrases.length)];
+        setTimeout(() => msgEl.innerText = "", 1500);
+    }
+
+    class Player {
+        constructor() {
+            this.width = 60;
+            this.height = 80;
+            this.x = 100;
+            this.y = canvas.height - this.height - 50;
+            this.dy = 0;
+            this.jumpCount = 0;
+            this.isDucking = false;
+            this.color = '#ff00ff';
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x + this.width/2, this.y + this.height/2);
+            
+            let angle = Math.sin(frame * (0.1 + currentSpeed * 0.02)) * 0.15;
+            ctx.rotate(angle);
+
+            ctx.fillStyle = this.color;
+            let currentHeight = this.isDucking ? this.height/2 : this.height;
+            ctx.fillRect(-this.width/2, -currentHeight/2, this.width, currentHeight);
+            
+            ctx.fillStyle = '#ffdbac';
+            ctx.beginPath();
+            ctx.arc(0, -currentHeight/2, 25, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#4a2c2a';
+            ctx.fillRect(-20, -currentHeight/2 - 30, 40, 15);
+
+            ctx.fillStyle = 'black';
+            ctx.fillRect(-15, -currentHeight/2 - 5, 30, 8);
+
+            const grd = ctx.createLinearGradient(-30, 0, -60, 40);
+            grd.addColorStop(0, "red");
+            grd.addColorStop(0.2, "orange");
+            grd.addColorStop(0.4, "yellow");
+            grd.addColorStop(0.6, "green");
+            grd.addColorStop(0.8, "blue");
+            grd.addColorStop(1, "violet");
+            ctx.fillStyle = grd;
+            ctx.beginPath();
+            ctx.moveTo(-this.width/2, -currentHeight/4);
+            ctx.lineTo(-this.width/2 - 50, 40 + Math.sin(frame*0.2)*15);
+            ctx.lineTo(-this.width/2, currentHeight/2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        update() {
+            if (this.y < canvas.height - this.height - 50 || this.dy < 0) {
+                this.dy += GRAVITY;
+                this.y += this.dy;
+            } else {
+                this.y = canvas.height - this.height - 50;
+                this.dy = 0;
+                this.jumpCount = 0;
+            }
+        }
+
+        jump() {
+            if (this.jumpCount < 2) {
+                this.dy = JUMP_FORCE;
+                this.jumpCount++;
+                createParticles(this.x, this.y, '#00ffff');
+            }
+        }
+    }
+
+    class Obstacle {
+        constructor() {
+            this.type = Math.random() > 0.4 ? 'HATER' : 'HEART';
+            this.width = 50;
+            this.height = 50;
+            this.x = canvas.width + 100;
+            // Higher speed makes things spawn a bit further back sometimes to prevent impossible jumps
+            this.y = this.type === 'HATER' ? canvas.height - 100 : canvas.height - 200 - Math.random() * 50;
+            this.speed = currentSpeed;
+            this.collected = false;
+        }
+
+        draw() {
+            if (this.collected) return;
+            ctx.font = '40px serif';
+            if (this.type === 'HATER') {
+                ctx.fillText('💩', this.x, this.y + 40);
+            } else {
+                ctx.fillText('💖', this.x, this.y + 40);
+            }
+        }
+
+        update() {
+            this.x -= this.speed;
+        }
+    }
+
+    function createParticles(x, y, color) {
+        for (let i = 0; i < 12; i++) {
+            particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.5) * 12,
+                life: 1,
+                color
+            });
+        }
+    }
+
+    function init() {
+        canvas.width = 800;
+        canvas.height = 400;
+        player = new Player();
+        obstacles = [];
+        particles = [];
+        score = 0;
+        lives = 3;
+        frame = 0;
+        currentSpeed = INITIAL_SPEED;
+        updateUI();
+    }
+
+    function updateUI() {
+        scoreEl.innerText = `FABULOUSNESS: ${score}`;
+        livesEl.innerText = `LIVES: ${'❤️'.repeat(lives)}`;
+        
+        // Update speed bar
+        const speedPercent = ((currentSpeed - INITIAL_SPEED) / (MAX_SPEED - INITIAL_SPEED)) * 100;
+        speedBar.style.width = `${speedPercent}%`;
+        if (speedPercent > 80) speedBar.style.background = '#ff0000';
+        else if (speedPercent > 40) speedBar.style.background = '#ffff00';
+        else speedBar.style.background = '#00ffff';
+    }
+
+    function spawnObstacle() {
+        // As speed increases, the spawn interval decreases to keep the gap roughly consistent
+        // or actually get harder by decreasing the interval
+        let spawnInterval = Math.max(30, 80 - Math.floor(currentSpeed * 2));
+        if (frame % spawnInterval === 0) {
+            obstacles.push(new Obstacle());
+        }
+    }
+
+    function checkCollisions() {
+        obstacles.forEach(obs => {
+            if (obs.collected) return;
+
+            if (player.x < obs.x + obs.width - 10 &&
+                player.x + player.width - 10 > obs.x &&
+                player.y < obs.y + obs.height - 10 &&
+                player.y + (player.isDucking ? player.height/2 : player.height) > obs.y + 10) {
+                
+                if (obs.type === 'HEART') {
+                    score += 10;
+                    obs.collected = true;
+                    createParticles(obs.x, obs.y, '#ff00ff');
+                    showMsg();
+                } else {
+                    lives--;
+                    obs.collected = true;
+                    createParticles(obs.x, obs.y, '#ff0000');
+                    if (lives <= 0) gameOver();
+                }
+                updateUI();
+            }
+        });
+    }
+
+    function drawBackground() {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+        
+        // Moving road lines
+        ctx.strokeStyle = '#ff00ff';
+        ctx.lineWidth = 2;
+        let offset = (frame * currentSpeed) % 40;
+        ctx.setLineDash([20, 20]);
+        ctx.lineDashOffset = offset;
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height - 45);
+        ctx.lineTo(canvas.width, canvas.height - 45);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Speed effect lines
+        if (currentSpeed > 12) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            for(let i=0; i<5; i++) {
+                let ly = 50 + i * 60;
+                let lx = (frame * (currentSpeed * 2) + i * 200) % (canvas.width + 200);
+                ctx.beginPath();
+                ctx.moveTo(canvas.width - lx, ly);
+                ctx.lineTo(canvas.width - lx + 100, ly);
+                ctx.stroke();
+            }
+        }
+    }
+
+    function gameLoop() {
+        if (gameState !== 'PLAYING') return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Increase speed over time
+        if (currentSpeed < MAX_SPEED) {
+            currentSpeed += SPEED_INCREMENT;
+            updateUI();
+        }
+
+        drawBackground();
+        spawnObstacle();
+        
+        player.update();
+        player.draw();
+
+        obstacles = obstacles.filter(obs => obs.x > -100);
+        obstacles.forEach(obs => {
+            obs.update();
+            obs.draw();
+        });
+
+        particles = particles.filter(p => p.life > 0);
+        particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.03;
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x, p.y, 4, 4);
+            ctx.globalAlpha = 1;
+        });
+
+        checkCollisions();
+
+        frame++;
+        requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+        menu.style.display = 'none';
+        gameState = 'PLAYING';
+        init();
+        gameLoop();
+    }
+
+    function gameOver() {
+        gameState = 'MENU';
+        menu.style.display = 'block';
+        menu.innerHTML = `
+            <h1 class="text-4xl mb-4">GAME OVER!</h1>
+            <p class="mb-4">The tour was legendary!<br>Final Score: ${score}<br>Max Speed Reached: ${currentSpeed.toFixed(1)}</p>
+            <button class="btn" onclick="startGame()">RETOUR!</button>
+        `;
+    }
+
+    window.addEventListener('keydown', e => {
+        if (e.code === 'ArrowUp' || e.code === 'Space') {
+            player.jump();
+        }
+        if (e.code === 'ArrowDown') {
+            player.isDucking = true;
+        }
+    });
+
+    window.addEventListener('keyup', e => {
+        if (e.code === 'ArrowDown') {
+            player.isDucking = false;
+        }
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        player.jump();
+    });
+
+    init();
+</script>
+
+</body>
+</html>
